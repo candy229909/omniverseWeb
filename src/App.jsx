@@ -8,6 +8,8 @@ import AccountPage from './pages/AccountPage.jsx'
 import AdminPage from './pages/AdminPage.jsx'
 import ProjectsPage from './pages/ProjectsPage.jsx'
 import ProjectDetailPage from './pages/ProjectDetailPage.jsx'
+import SessionsPage from './pages/SessionsPage.jsx'
+import SessionDetailPage from './pages/SessionDetailPage.jsx'
 import AppLayout from './components/AppLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import AdminRoute from './components/AdminRoute.jsx'
@@ -32,6 +34,8 @@ export default function App() {
         <Route path="/account" element={<AccountPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
+        <Route path="/sessions" element={<SessionsPage />} />
+        <Route path="/sessions/:id" element={<SessionDetailPage />} />
         <Route
           path="/admin"
           element={

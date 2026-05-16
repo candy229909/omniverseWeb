@@ -20,6 +20,7 @@ export default function AppLayout() {
         <nav className="nav">
           <NavLink to="/dashboard" className="nav-link">儀表板</NavLink>
           <NavLink to="/projects" className="nav-link">專案管理</NavLink>
+          <NavLink to="/sessions" className="nav-link">Session 串流</NavLink>
           <NavLink to="/account" className="nav-link">帳號設定</NavLink>
           {isAdmin && (
             <NavLink to="/admin" className="nav-link nav-admin">系統管理</NavLink>
