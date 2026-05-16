@@ -1,0 +1,2 @@
+# omniverseWeb
+在試用期內老闆要求趕快把web的管理系統在2天內生出來，我只能用AI生成了XDDD
