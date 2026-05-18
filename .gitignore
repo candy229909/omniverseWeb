@@ -1,0 +1,19 @@
+node_modules
+.next
+out
+dist
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.log
+.env
+.env.local
+
+# TypeScript
+*.tsbuildinfo
+
+# SQLite
+prisma/*.db
+prisma/*.db-journal
