@@ -7,10 +7,14 @@ import type { StreamSession } from '@/lib/types'
 
 const emptyForm = {
   name: '',
-  host: '127.0.0.1',
-  port: 49100,
-  signalingPath: '/signaling/client',
-  secure: false,
+  signalingServer: '127.0.0.1',
+  signalingPort: 49100,
+  mediaServer: '',
+  mediaPort: 1024,
+  width: 1920,
+  height: 1080,
+  fps: 60,
+  streamType: 'local' as 'local' | 'stream',
   description: '',
 }
 
@@ -33,7 +37,14 @@ export default function SessionsPage() {
     e.preventDefault()
     setError('')
     try {
-      await api.post('/api/sessions', { ...form, port: Number(form.port) })
+      await api.post('/api/sessions', {
+        ...form,
+        signalingPort: Number(form.signalingPort),
+        mediaPort: Number(form.mediaPort),
+        width: Number(form.width),
+        height: Number(form.height),
+        fps: Number(form.fps),
+      })
       setForm(emptyForm)
       setShowForm(false)
       refresh()
@@ -53,7 +64,9 @@ export default function SessionsPage() {
       <div className="page-header">
         <div>
           <h1>Session 管理</h1>
-          <p className="page-subtitle">管理 Omniverse Kit App Streaming 的 WebRTC 連線設定。</p>
+          <p className="page-subtitle">
+            管理 Omniverse Kit App Streaming / Isaac Sim 的 WebRTC 連線設定（使用 @nvidia/omniverse-webrtc-streaming-library）。
+          </p>
         </div>
         <button className="btn-primary" onClick={() => setShowForm((v) => !v)}>
           {showForm ? '取消' : '+ 新增 Session'}
@@ -68,27 +81,53 @@ export default function SessionsPage() {
               <span>名稱</span>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </label>
+
+            <label className="field">
+              <span>串流模式</span>
+              <select
+                value={form.streamType}
+                onChange={(e) => setForm({ ...form, streamType: e.target.value as 'local' | 'stream' })}
+              >
+                <option value="local">local — 本機 Kit / Isaac Sim livestream</option>
+                <option value="stream">stream — 容器化 Kit App Streaming</option>
+              </select>
+            </label>
+
             <div className="grid-two">
               <label className="field">
-                <span>Host</span>
-                <input value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} required />
+                <span>Signaling Server</span>
+                <input value={form.signalingServer} onChange={(e) => setForm({ ...form, signalingServer: e.target.value })} required />
               </label>
               <label className="field">
-                <span>Port</span>
-                <input type="number" value={form.port} onChange={(e) => setForm({ ...form, port: Number(e.target.value) })} required />
+                <span>Signaling Port</span>
+                <input type="number" value={form.signalingPort} onChange={(e) => setForm({ ...form, signalingPort: Number(e.target.value) })} required />
+              </label>
+            </div>
+
+            <div className="grid-two">
+              <label className="field">
+                <span>Media Server <em>(留空 = 同 signaling)</em></span>
+                <input value={form.mediaServer} onChange={(e) => setForm({ ...form, mediaServer: e.target.value })} placeholder={form.signalingServer} />
+              </label>
+              <label className="field">
+                <span>Media Port</span>
+                <input type="number" value={form.mediaPort} onChange={(e) => setForm({ ...form, mediaPort: Number(e.target.value) })} />
+              </label>
+            </div>
+
+            <div className="grid-two">
+              <label className="field">
+                <span>解析度寬</span>
+                <input type="number" value={form.width} onChange={(e) => setForm({ ...form, width: Number(e.target.value) })} />
+              </label>
+              <label className="field">
+                <span>解析度高</span>
+                <input type="number" value={form.height} onChange={(e) => setForm({ ...form, height: Number(e.target.value) })} />
               </label>
             </div>
             <label className="field">
-              <span>Signaling 路徑</span>
-              <input value={form.signalingPath} onChange={(e) => setForm({ ...form, signalingPath: e.target.value })} />
-            </label>
-            <label className="checkbox-field">
-              <input
-                type="checkbox"
-                checked={form.secure}
-                onChange={(e) => setForm({ ...form, secure: e.target.checked })}
-              />
-              <span>使用 wss:// (TLS)</span>
+              <span>FPS</span>
+              <input type="number" value={form.fps} onChange={(e) => setForm({ ...form, fps: Number(e.target.value) })} />
             </label>
             <label className="field">
               <span>描述</span>
@@ -115,11 +154,15 @@ export default function SessionsPage() {
                   <span className={`badge badge-${s.status || 'idle'}`}>{s.status || 'idle'}</span>
                 </div>
                 <div className="session-endpoint">
-                  <code>{s.secure ? 'wss' : 'ws'}://{s.host}:{s.port}{s.signalingPath || ''}</code>
+                  <code>
+                    {s.streamType} · {s.signalingServer}:{s.signalingPort}
+                    {(s.mediaServer && s.mediaServer !== s.signalingServer) || (s.mediaPort && s.mediaPort !== s.signalingPort)
+                      ? ` ⇢ ${s.mediaServer}:${s.mediaPort}` : ''}
+                  </code>
                 </div>
                 {s.description && <p className="project-desc">{s.description}</p>}
                 <div className="project-meta">
-                  <span>建立於 {new Date(s.createdAt).toLocaleDateString()}</span>
+                  <span>{s.width}×{s.height}@{s.fps}fps</span>
                   {s.lastConnectedAt && <span>最近連線 {new Date(s.lastConnectedAt).toLocaleString()}</span>}
                 </div>
                 <div className="project-actions">

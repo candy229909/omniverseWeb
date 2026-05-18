@@ -8,12 +8,25 @@ import { api } from '@/lib/api-client'
 import WebRTCViewer from '@/components/WebRTCViewer'
 import type { StreamSession } from '@/lib/types'
 
+type FormState = {
+  name: string
+  signalingServer: string
+  signalingPort: number
+  mediaServer: string
+  mediaPort: number
+  width: number
+  height: number
+  fps: number
+  streamType: 'local' | 'stream'
+  description: string
+}
+
 export default function SessionDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { user, isAdmin } = useAuth()
   const [session, setSession] = useState<StreamSession | null>(null)
-  const [form, setForm] = useState<{ name: string; host: string; port: number; signalingPath: string; secure: boolean; description: string } | null>(null)
+  const [form, setForm] = useState<FormState | null>(null)
   const [error, setError] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -26,10 +39,14 @@ export default function SessionDetailPage() {
         setSession(s)
         setForm({
           name: s.name,
-          host: s.host,
-          port: s.port,
-          signalingPath: s.signalingPath || '',
-          secure: !!s.secure,
+          signalingServer: s.signalingServer,
+          signalingPort: s.signalingPort,
+          mediaServer: s.mediaServer || '',
+          mediaPort: s.mediaPort,
+          width: s.width,
+          height: s.height,
+          fps: s.fps,
+          streamType: s.streamType,
           description: s.description || '',
         })
       } catch (err) {
@@ -49,7 +66,14 @@ export default function SessionDetailPage() {
     setError('')
     setMsg(null)
     try {
-      const updated = await api.patch<StreamSession>(`/api/sessions/${id}`, { ...form, port: Number(form.port) })
+      const updated = await api.patch<StreamSession>(`/api/sessions/${id}`, {
+        ...form,
+        signalingPort: Number(form.signalingPort),
+        mediaPort: Number(form.mediaPort),
+        width: Number(form.width),
+        height: Number(form.height),
+        fps: Number(form.fps),
+      })
       setSession(updated)
       setMsg('Session 已更新')
     } catch (err) {
@@ -75,7 +99,9 @@ export default function SessionDetailPage() {
           <Link href="/sessions" className="link-muted">← 回 Session 列表</Link>
           <h1>{session.name}</h1>
           <p className="page-subtitle">
-            <code>{session.secure ? 'wss' : 'ws'}://{session.host}:{session.port}{session.signalingPath || ''}</code>
+            <code>
+              {session.streamType} · signaling {session.signalingServer}:{session.signalingPort} · media {session.mediaServer || session.signalingServer}:{session.mediaPort}
+            </code>
           </p>
         </div>
         {canEdit && <button className="btn-link danger" onClick={remove}>刪除 Session</button>}
@@ -93,28 +119,50 @@ export default function SessionDetailPage() {
             <span>名稱</span>
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={!canEdit} required />
           </label>
+          <label className="field">
+            <span>串流模式</span>
+            <select
+              value={form.streamType}
+              onChange={(e) => setForm({ ...form, streamType: e.target.value as 'local' | 'stream' })}
+              disabled={!canEdit}
+            >
+              <option value="local">local — 本機 Kit / Isaac Sim livestream</option>
+              <option value="stream">stream — 容器化 Kit App Streaming</option>
+            </select>
+          </label>
           <div className="grid-two">
             <label className="field">
-              <span>Host</span>
-              <input value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} disabled={!canEdit} required />
+              <span>Signaling Server</span>
+              <input value={form.signalingServer} onChange={(e) => setForm({ ...form, signalingServer: e.target.value })} disabled={!canEdit} required />
             </label>
             <label className="field">
-              <span>Port</span>
-              <input type="number" value={form.port} onChange={(e) => setForm({ ...form, port: Number(e.target.value) })} disabled={!canEdit} required />
+              <span>Signaling Port</span>
+              <input type="number" value={form.signalingPort} onChange={(e) => setForm({ ...form, signalingPort: Number(e.target.value) })} disabled={!canEdit} required />
+            </label>
+          </div>
+          <div className="grid-two">
+            <label className="field">
+              <span>Media Server</span>
+              <input value={form.mediaServer} onChange={(e) => setForm({ ...form, mediaServer: e.target.value })} disabled={!canEdit} placeholder={form.signalingServer} />
+            </label>
+            <label className="field">
+              <span>Media Port</span>
+              <input type="number" value={form.mediaPort} onChange={(e) => setForm({ ...form, mediaPort: Number(e.target.value) })} disabled={!canEdit} />
+            </label>
+          </div>
+          <div className="grid-two">
+            <label className="field">
+              <span>解析度寬</span>
+              <input type="number" value={form.width} onChange={(e) => setForm({ ...form, width: Number(e.target.value) })} disabled={!canEdit} />
+            </label>
+            <label className="field">
+              <span>解析度高</span>
+              <input type="number" value={form.height} onChange={(e) => setForm({ ...form, height: Number(e.target.value) })} disabled={!canEdit} />
             </label>
           </div>
           <label className="field">
-            <span>Signaling 路徑</span>
-            <input value={form.signalingPath} onChange={(e) => setForm({ ...form, signalingPath: e.target.value })} disabled={!canEdit} />
-          </label>
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              checked={form.secure}
-              onChange={(e) => setForm({ ...form, secure: e.target.checked })}
-              disabled={!canEdit}
-            />
-            <span>使用 wss:// (TLS)</span>
+            <span>FPS</span>
+            <input type="number" value={form.fps} onChange={(e) => setForm({ ...form, fps: Number(e.target.value) })} disabled={!canEdit} />
           </label>
           <label className="field">
             <span>描述</span>

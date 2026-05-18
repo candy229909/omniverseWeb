@@ -63,11 +63,16 @@ async function main() {
   if (sessionCount === 0) {
     await prisma.streamSession.create({
       data: {
-        name: 'Local Kit Stream',
-        host: '127.0.0.1',
-        port: 49100,
-        signalingPath: '/signaling/client',
-        description: '本機 Omniverse Kit App Streaming 測試 session。',
+        name: 'Local Isaac Sim',
+        signalingServer: '127.0.0.1',
+        signalingPort: 49100,
+        mediaServer: '127.0.0.1',
+        mediaPort: 1024,
+        streamType: 'local',
+        width: 1920,
+        height: 1080,
+        fps: 60,
+        description: '本機 Isaac Sim / Kit App livestream 範例（使用 @nvidia/omniverse-webrtc-streaming-library 連線）。',
         ownerId: admin.id,
       },
     })

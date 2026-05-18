@@ -16,23 +16,37 @@ export async function GET() {
   }
 }
 
+function validatePort(value: unknown, label: string) {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n <= 0 || n > 65535) {
+    throw new HttpError(400, `${label} 必須為 1-65535 之間的整數`)
+  }
+  return n
+}
+
 export async function POST(req: NextRequest) {
   try {
     const me = await requireUser()
-    const { name, host, port, signalingPath, secure, description } = await req.json()
+    const body = await req.json()
+    const { name, signalingServer, signalingPort, mediaServer, mediaPort, width, height, fps, streamType, description } = body
     if (!name?.trim()) throw new HttpError(400, 'Session 名稱不可為空')
-    if (!host?.trim()) throw new HttpError(400, 'Host 不可為空')
-    const portNum = Number(port)
-    if (!Number.isInteger(portNum) || portNum <= 0 || portNum > 65535) {
-      throw new HttpError(400, 'Port 必須為 1-65535 之間的整數')
-    }
+    if (!signalingServer?.trim()) throw new HttpError(400, 'Signaling server 不可為空')
+
+    const sigPort = validatePort(signalingPort, 'Signaling port')
+    const finalMediaServer = (mediaServer && String(mediaServer).trim()) || signalingServer
+    const mediaPortNum = mediaPort != null && mediaPort !== '' ? validatePort(mediaPort, 'Media port') : sigPort
+
     const session = await prisma.streamSession.create({
       data: {
         name,
-        host,
-        port: portNum,
-        signalingPath: signalingPath || '/signaling/client',
-        secure: !!secure,
+        signalingServer,
+        signalingPort: sigPort,
+        mediaServer: finalMediaServer,
+        mediaPort: mediaPortNum,
+        width: Number(width) || 1920,
+        height: Number(height) || 1080,
+        fps: Number(fps) || 60,
+        streamType: streamType === 'stream' ? 'stream' : 'local',
         description: description || '',
         ownerId: me.id,
       },

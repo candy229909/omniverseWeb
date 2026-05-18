@@ -3,24 +3,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { StreamSession } from '@/lib/types'
 
-const MSG = {
-  OFFER: 'offer',
-  ANSWER: 'answer',
-  ICE: 'ice',
-  READY: 'ready',
+// The SDK is published to NVIDIA's private npm registry (see `.npmrc`) and
+// is loaded at runtime only. We use `new Function('import(...)')` so webpack
+// won't try to statically resolve the package at build time — builds work
+// even without registry access; the stream only requires the package at
+// the moment a user actually clicks "連線".
+type AppStreamerType = typeof import('@nvidia/omniverse-webrtc-streaming-library').AppStreamer
+type StreamEvent = import('@nvidia/omniverse-webrtc-streaming-library').StreamEvent
+
+const SDK_PACKAGE = '@nvidia/omniverse-webrtc-streaming-library'
+
+async function loadOmniverseSDK(): Promise<typeof import('@nvidia/omniverse-webrtc-streaming-library')> {
+  const importer = new Function('p', 'return import(p)') as (p: string) => Promise<typeof import('@nvidia/omniverse-webrtc-streaming-library')>
+  return importer(SDK_PACKAGE)
 }
 
-const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
+type ViewerState = 'idle' | 'connecting' | 'connected' | 'error'
 
-function buildSignalingUrl(session: StreamSession) {
-  const proto = session.secure ? 'wss' : 'ws'
-  const path = session.signalingPath?.startsWith('/')
-    ? session.signalingPath
-    : `/${session.signalingPath || ''}`
-  return `${proto}://${session.host}:${session.port}${path}`
-}
-
-type State = 'idle' | 'connecting' | 'connected' | 'error'
+const VIDEO_ID = 'omniverse-remote-video'
+const AUDIO_ID = 'omniverse-remote-audio'
 
 export default function WebRTCViewer({
   session,
@@ -31,145 +32,113 @@ export default function WebRTCViewer({
   onConnected?: () => void
   onDisconnected?: () => void
 }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const pcRef = useRef<RTCPeerConnection | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
-  const stateRef = useRef<State>('idle')
-  const [state, setState] = useState<State>('idle')
+  const streamerRef = useRef<AppStreamerType | null>(null)
+  const stateRef = useRef<ViewerState>('idle')
+  const [state, setState] = useState<ViewerState>('idle')
   const [error, setError] = useState('')
   const [stats, setStats] = useState({ bitrate: 0, fps: 0 })
   const [muted, setMuted] = useState(true)
 
-  const updateState = (s: State) => {
+  const updateState = (s: ViewerState) => {
     stateRef.current = s
     setState(s)
   }
 
-  const cleanup = useCallback(() => {
-    if (pcRef.current) {
-      pcRef.current.getSenders().forEach((s) => s.track?.stop())
-      pcRef.current.close()
-      pcRef.current = null
-    }
-    if (wsRef.current) {
-      try { wsRef.current.close() } catch { /* noop */ }
-      wsRef.current = null
-    }
-    if (videoRef.current) videoRef.current.srcObject = null
-  }, [])
-
   const disconnect = useCallback(() => {
-    cleanup()
+    try {
+      streamerRef.current?.stop()
+    } catch (e) {
+      console.warn('AppStreamer.stop failed', e)
+    }
     updateState('idle')
     setStats({ bitrate: 0, fps: 0 })
     onDisconnected?.()
-  }, [cleanup, onDisconnected])
+  }, [onDisconnected])
 
-  useEffect(() => () => cleanup(), [cleanup])
+  useEffect(() => {
+    return () => {
+      try { streamerRef.current?.stop() } catch { /* noop */ }
+    }
+  }, [])
 
   const connect = useCallback(async () => {
     setError('')
     updateState('connecting')
     try {
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
-      pcRef.current = pc
+      const mod = await loadOmniverseSDK()
+      const AppStreamer = mod.AppStreamer
+      streamerRef.current = AppStreamer
 
-      pc.ontrack = (event) => {
-        if (videoRef.current) videoRef.current.srcObject = event.streams[0]
-      }
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: MSG.ICE, candidate: event.candidate }))
-        }
-      }
-
-      pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'connected') {
+      const config = {
+        streamType: session.streamType,
+        videoElementId: VIDEO_ID,
+        audioElementId: AUDIO_ID,
+        signalingServer: session.signalingServer,
+        signalingPort: session.signalingPort,
+        mediaServer: session.mediaServer || session.signalingServer,
+        mediaPort: session.mediaPort || session.signalingPort,
+        authenticate: false,
+        maxReconnects: 10,
+        nativeTouchEvents: true,
+        width: session.width,
+        height: session.height,
+        fps: session.fps,
+        onStart: (e: StreamEvent) => {
+          console.info('[Omniverse] stream started', e)
           updateState('connected')
           onConnected?.()
-        } else if (
-          ['failed', 'disconnected', 'closed'].includes(pc.connectionState) &&
-          stateRef.current !== 'idle'
-        ) {
-          disconnect()
-        }
+        },
+        onStop: (e: StreamEvent) => {
+          console.info('[Omniverse] stream stopped', e)
+          if (stateRef.current !== 'idle') disconnect()
+        },
+        onUpdate: (e: StreamEvent) => {
+          // metadata / size updates from the streamed app
+          console.debug('[Omniverse] update', e)
+        },
+        onCustomEvent: (e: StreamEvent) => {
+          console.debug('[Omniverse] custom event', e)
+        },
       }
 
-      pc.addTransceiver('video', { direction: 'recvonly' })
-      pc.addTransceiver('audio', { direction: 'recvonly' })
-
-      const url = buildSignalingUrl(session)
-      const ws = new WebSocket(url)
-      wsRef.current = ws
-
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: MSG.READY, sessionId: session.id }))
-      }
-
-      ws.onerror = () => {
-        setError(`無法連接訊號伺服器：${url}`)
-        updateState('error')
-      }
-
-      ws.onclose = () => {
-        if (stateRef.current === 'connecting') {
-          setError(`訊號伺服器已關閉連線：${url}`)
-          updateState('error')
-        }
-      }
-
-      ws.onmessage = async (event) => {
-        let msg: { type: string; sdp?: string; candidate?: RTCIceCandidateInit }
-        try { msg = JSON.parse(event.data) } catch { return }
-
-        if (msg.type === MSG.OFFER && msg.sdp) {
-          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }))
-          const answer = await pc.createAnswer()
-          await pc.setLocalDescription(answer)
-          ws.send(JSON.stringify({ type: MSG.ANSWER, sdp: answer.sdp }))
-        } else if (msg.type === MSG.ANSWER && msg.sdp) {
-          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: msg.sdp }))
-        } else if (msg.type === MSG.ICE && msg.candidate) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
-          } catch (e) {
-            console.warn('addIceCandidate failed', e)
-          }
-        }
-      }
+      await AppStreamer.connect(config)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[Omniverse] connect failed', err)
+      setError(`連線失敗：${message}`)
       updateState('error')
-      cleanup()
     }
-  }, [session, cleanup, disconnect, onConnected])
+  }, [session, disconnect, onConnected])
 
+  // 簡易視訊統計（讀取 <video> 元素的 currentTime / videoWidth 變化作為粗略指標）
   useEffect(() => {
-    if (state !== 'connected' || !pcRef.current) return
-    let lastBytes = 0
-    let lastTs = Date.now()
-    const id = setInterval(async () => {
-      const pc = pcRef.current
-      if (!pc) return
-      const reports = await pc.getStats()
-      reports.forEach((r) => {
-        if (r.type === 'inbound-rtp' && (r as { kind?: string }).kind === 'video') {
-          const now = Date.now()
-          const dt = (now - lastTs) / 1000
-          const bytes = (r as { bytesReceived?: number }).bytesReceived || 0
-          const bitrate = dt > 0 ? Math.round(((bytes - lastBytes) * 8) / dt / 1000) : 0
-          lastBytes = bytes
-          lastTs = now
-          setStats({ bitrate, fps: Math.round((r as { framesPerSecond?: number }).framesPerSecond || 0) })
-        }
-      })
+    if (state !== 'connected') return
+    const video = document.getElementById(VIDEO_ID) as HTMLVideoElement | null
+    if (!video) return
+    let lastTime = video.currentTime
+    let lastStamp = performance.now()
+    const id = setInterval(() => {
+      const now = performance.now()
+      const dt = (now - lastStamp) / 1000
+      const dframes = Math.max(0, video.currentTime - lastTime)
+      const fps = dt > 0 ? Math.round(dframes / dt * (session.fps || 60)) : 0
+      lastTime = video.currentTime
+      lastStamp = now
+      setStats({ bitrate: 0, fps })
     }, 1000)
     return () => clearInterval(id)
-  }, [state])
+  }, [state, session.fps])
+
+  // Mute toggle — control the audio element managed by the SDK.
+  useEffect(() => {
+    const audio = document.getElementById(AUDIO_ID) as HTMLAudioElement | null
+    if (audio) audio.muted = muted
+    const video = document.getElementById(VIDEO_ID) as HTMLVideoElement | null
+    if (video) video.muted = muted
+  }, [muted, state])
 
   const toggleFullscreen = () => {
-    const el = videoRef.current
+    const el = document.getElementById(VIDEO_ID) as HTMLVideoElement | null
     if (!el) return
     if (document.fullscreenElement) document.exitFullscreen()
     else el.requestFullscreen()
@@ -178,7 +147,9 @@ export default function WebRTCViewer({
   return (
     <div className="rtc-viewer">
       <div className="rtc-video-wrap">
-        <video ref={videoRef} autoPlay playsInline muted={muted} className="rtc-video" />
+        {/* AppStreamer attaches the remote MediaStream to these elements by id */}
+        <video id={VIDEO_ID} className="rtc-video" autoPlay playsInline muted={muted} tabIndex={-1} />
+        <audio id={AUDIO_ID} muted={muted} />
         {state !== 'connected' && (
           <div className="rtc-overlay">
             {state === 'idle' && <div>尚未連線</div>}
@@ -192,8 +163,8 @@ export default function WebRTCViewer({
         <div className="rtc-status">
           <span className={`rtc-dot rtc-dot-${state}`} />
           <span>{labelOf(state)}</span>
-          {state === 'connected' && (
-            <span className="rtc-stats">{stats.fps} fps · {stats.bitrate} kbps</span>
+          {state === 'connected' && stats.fps > 0 && (
+            <span className="rtc-stats">~{stats.fps} fps</span>
           )}
         </div>
         <div className="rtc-actions">
@@ -214,6 +185,6 @@ export default function WebRTCViewer({
   )
 }
 
-function labelOf(s: State) {
+function labelOf(s: ViewerState) {
   return ({ idle: '尚未連線', connecting: '連線中…', connected: '已連線', error: '連線錯誤' } as const)[s]
 }

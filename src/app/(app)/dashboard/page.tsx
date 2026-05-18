@@ -94,7 +94,7 @@ export default function DashboardPage() {
             {recentSessions.map((s) => (
               <li key={s.id} className="list-item">
                 <Link href={`/sessions/${s.id}`} className="list-title">{s.name}</Link>
-                <code className="list-meta">{s.host}:{s.port}</code>
+                <code className="list-meta">{s.signalingServer}:{s.signalingPort}</code>
               </li>
             ))}
           </ul>

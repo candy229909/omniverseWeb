@@ -20,10 +20,14 @@ export type Project = {
 export type StreamSession = {
   id: string
   name: string
-  host: string
-  port: number
-  signalingPath: string
-  secure: boolean
+  signalingServer: string
+  signalingPort: number
+  mediaServer: string
+  mediaPort: number
+  width: number
+  height: number
+  fps: number
+  streamType: 'local' | 'stream'
   description: string
   status: string
   ownerId: string

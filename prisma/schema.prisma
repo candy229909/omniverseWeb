@@ -48,10 +48,17 @@ model ProjectMember {
 model StreamSession {
   id              String    @id @default(cuid())
   name            String
-  host            String
-  port            Int
-  signalingPath   String    @default("/signaling/client")
-  secure          Boolean   @default(false)
+  // Omniverse Web SDK (AppStreamer) connection params
+  signalingServer String
+  signalingPort   Int       @default(49100)
+  mediaServer     String
+  mediaPort       Int       @default(1024)
+  // 1920x1080@60fps by default; can be overridden per session
+  width           Int       @default(1920)
+  height          Int       @default(1080)
+  fps             Int       @default(60)
+  // Streaming target: "local" (Kit on local network) or "stream" (container)
+  streamType      String    @default("local")
   description     String    @default("")
   status          String    @default("idle")
   ownerId         String

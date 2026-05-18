@@ -9,6 +9,14 @@ async function loadOrThrow(id: string) {
   return s
 }
 
+function validatePort(value: unknown, label: string) {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n <= 0 || n > 65535) {
+    throw new HttpError(400, `${label} 必須為 1-65535 之間的整數`)
+  }
+  return n
+}
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const me = await requireUser()
@@ -28,16 +36,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const body = await req.json()
     const data: Record<string, unknown> = {}
     if (typeof body.name === 'string') data.name = body.name
-    if (typeof body.host === 'string') data.host = body.host
-    if (body.port !== undefined) {
-      const portNum = Number(body.port)
-      if (!Number.isInteger(portNum) || portNum <= 0 || portNum > 65535) {
-        throw new HttpError(400, 'Port 必須為 1-65535 之間的整數')
-      }
-      data.port = portNum
-    }
-    if (typeof body.signalingPath === 'string') data.signalingPath = body.signalingPath
-    if (typeof body.secure === 'boolean') data.secure = body.secure
+    if (typeof body.signalingServer === 'string') data.signalingServer = body.signalingServer
+    if (typeof body.mediaServer === 'string') data.mediaServer = body.mediaServer
+    if (body.signalingPort !== undefined) data.signalingPort = validatePort(body.signalingPort, 'Signaling port')
+    if (body.mediaPort !== undefined) data.mediaPort = validatePort(body.mediaPort, 'Media port')
+    if (body.width !== undefined) data.width = Number(body.width) || 1920
+    if (body.height !== undefined) data.height = Number(body.height) || 1080
+    if (body.fps !== undefined) data.fps = Number(body.fps) || 60
+    if (body.streamType === 'local' || body.streamType === 'stream') data.streamType = body.streamType
     if (typeof body.description === 'string') data.description = body.description
     if (typeof body.status === 'string') data.status = body.status
     if (body.lastConnectedAt === 'now') data.lastConnectedAt = new Date()

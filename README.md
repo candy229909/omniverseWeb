@@ -12,7 +12,7 @@ OmniverseWeb 的全端應用，基於 **Next.js 14 (App Router) + TypeScript + P
 - **前端 / 後端**：Next.js 14 App Router、React 18、TypeScript
 - **資料庫**：SQLite via Prisma
 - **驗證**：自寫 HttpOnly cookie session（JWT signed with `jose`） + `bcryptjs` 密碼雜湊
-- **WebRTC**：內建 viewer，WebSocket signaling 交換 SDP / ICE
+- **WebRTC 串流**：使用 NVIDIA 官方 SDK [`@nvidia/omniverse-webrtc-streaming-library`](https://github.com/NVIDIA-Omniverse/web-viewer-sample) 連接 Isaac Sim / Kit App Streaming
 
 ## 功能
 
@@ -90,17 +90,51 @@ prisma/
 └── seed.ts                     # 種子資料
 ```
 
-## WebRTC 訊號協定
+## Isaac Sim / Omniverse Kit 連線
 
-`src/components/WebRTCViewer.tsx` 連線到 `ws(s)://{host}:{port}{signalingPath}`，
-以 JSON 訊息交換 SDP / ICE：
+本專案的 WebRTC viewer (`src/components/WebRTCViewer.tsx`) 使用 NVIDIA 官方
+[`@nvidia/omniverse-webrtc-streaming-library`](https://github.com/NVIDIA-Omniverse/web-viewer-sample)
+（與 [web-viewer-sample](https://github.com/NVIDIA-Omniverse/web-viewer-sample) 同款）連線到
+Isaac Sim livestream extension 或 Kit App Streaming 容器。
 
-- 連線後送出 `{ type: 'ready', sessionId }`
-- 接收 `{ type: 'offer', sdp }` → 回應 `{ type: 'answer', sdp }`
-- 雙向 `{ type: 'ice', candidate }`
+### Session 欄位
 
-若您的 Omniverse Kit Streaming Server 使用不同訊號協定，調整檔案頂端的 `MSG` 常數
-或 `ws.onmessage` 處理邏輯即可。ICE / STUN 伺服器在同檔案 `ICE_SERVERS` 設定。
+每個 Session 對應 SDK 的 `DirectConfig`：
+
+| 欄位 | 對應 SDK 設定 | 說明 |
+| --- | --- | --- |
+| `streamType` | `streamType` | `"local"` 直連本機 livestream / `"stream"` 容器化 streaming |
+| `signalingServer`, `signalingPort` | 同名 | WebRTC signaling endpoint |
+| `mediaServer`, `mediaPort` | 同名 | Media transport endpoint（多數情況同 signaling） |
+| `width`, `height`, `fps` | 同名 | 串流影像規格，預設 1920×1080@60 |
+
+### Isaac Sim 對應設定
+
+Isaac Sim 內建的 WebRTC livestream extension 預設使用：
+- Signaling: `<host>:49100`
+- Media: `<host>:1024`
+
+啟用方式請參考 [Isaac Sim Livestream Clients](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/manual_livestream_clients.html)。
+
+### 私有 npm registry
+
+`@nvidia/omniverse-webrtc-streaming-library` 發佈在 NVIDIA 的私有 artifactory，
+本專案的 `.npmrc` 已設定 scope routing：
+
+```
+@nvidia:registry=https://edge.urm.nvidia.com:443/artifactory/api/npm/omniverse-client-npm/
+```
+
+套件被列在 `optionalDependencies` — 在能存取 NVIDIA registry 的環境會自動安裝；
+無法存取（例如某些 CI runner）則跳過，`next build` 仍可通過，因為 viewer 採用
+**runtime lazy import**，只有在使用者點擊「連線」時才會動態載入 SDK。
+
+若 CI 需要實際安裝套件來驗證 runtime 行為，請在 GitHub Actions 加上 `NPM_TOKEN`
+secret 並透過 `.npmrc` 注入：
+
+```yaml
+- run: echo "//edge.urm.nvidia.com/artifactory/api/npm/omniverse-client-npm/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+```
 
 ## 環境變數
 
