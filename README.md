@@ -125,15 +125,23 @@ Isaac Sim 內建的 WebRTC livestream extension 預設使用：
 @nvidia:registry=https://edge.urm.nvidia.com:443/artifactory/api/npm/omniverse-client-npm/
 ```
 
-套件被列在 `optionalDependencies` — 在能存取 NVIDIA registry 的環境會自動安裝；
-無法存取（例如某些 CI runner）則跳過，`next build` 仍可通過，因為 viewer 採用
-**runtime lazy import**，只有在使用者點擊「連線」時才會動態載入 SDK。
+SDK 套件**沒有列在 `package.json`**：私有 registry 無法保證所有環境都能 reach（特別是 GitHub-hosted CI runner），
+若列入會讓 `npm ci` 在這些環境直接失敗。請在第一次 `npm install` 後手動安裝一次：
 
-若 CI 需要實際安裝套件來驗證 runtime 行為，請在 GitHub Actions 加上 `NPM_TOKEN`
-secret 並透過 `.npmrc` 注入：
+```bash
+npm install @nvidia/omniverse-webrtc-streaming-library@5.6.0 --save-optional
+```
+
+Viewer 透過 **runtime lazy import** 載入 SDK，所以 `next build` 與 TypeScript 型別檢查
+在沒裝套件的環境也能通過（型別由 `src/types/omniverse-webrtc-streaming-library.d.ts` 補上）；
+只有使用者實際按下「連線」時才會嘗試動態載入。若按下後 DevTools console 顯示
+`Cannot find module '@nvidia/...'`，代表還沒裝套件。
+
+若要讓 CI 也安裝套件以驗證 runtime，請在 GitHub Actions 加 `NPM_TOKEN` secret 並注入 `.npmrc`：
 
 ```yaml
 - run: echo "//edge.urm.nvidia.com/artifactory/api/npm/omniverse-client-npm/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+- run: npm install @nvidia/omniverse-webrtc-streaming-library@5.6.0
 ```
 
 ## 環境變數

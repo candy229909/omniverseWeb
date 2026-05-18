@@ -24,10 +24,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        # `--no-optional` skips @nvidia/omniverse-webrtc-streaming-library,
-        # which lives on NVIDIA's private artifactory and isn't reachable
-        # from GitHub-hosted runners without an auth token.
-        run: npm ci --no-optional
+        run: npm ci
 
       - name: Type check
         run: npx tsc --noEmit
