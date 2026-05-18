@@ -11,6 +11,9 @@ dist
 .env
 .env.local
 
+# TypeScript
+*.tsbuildinfo
+
 # SQLite
 prisma/*.db
 prisma/*.db-journal
