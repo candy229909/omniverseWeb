@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("user") // "user" | "admin"
+  status    String   @default("active") // "active" | "disabled"
+  createdAt DateTime @default(now())
+
+  ownedProjects   Project[]        @relation("ProjectOwner")
+  projectMembers  ProjectMember[]
+  ownedSessions   StreamSession[]
+  resetTokens     ResetToken[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  status      String   @default("planning")
+  ownerId     String
+  createdAt   DateTime @default(now())
+
+  owner   User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members ProjectMember[]
+}
+
+model ProjectMember {
+  projectId String
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+}
+
+model StreamSession {
+  id              String    @id @default(cuid())
+  name            String
+  host            String
+  port            Int
+  signalingPath   String    @default("/signaling/client")
+  secure          Boolean   @default(false)
+  description     String    @default("")
+  status          String    @default("idle")
+  ownerId         String
+  createdAt       DateTime  @default(now())
+  lastConnectedAt DateTime?
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+}
+
+model ResetToken {
+  token     String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

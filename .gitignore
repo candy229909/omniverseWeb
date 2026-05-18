@@ -1,6 +1,7 @@
 node_modules
+.next
+out
 dist
-dist-ssr
 *.local
 .DS_Store
 .vscode/*
@@ -9,3 +10,7 @@ dist-ssr
 *.log
 .env
 .env.local
+
+# SQLite
+prisma/*.db
+prisma/*.db-journal
